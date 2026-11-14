@@ -74,16 +74,49 @@ Three students from the National Advanced School of Engineering of Yaoundé
 ## Repository layout
 
 ```
-pipeline/ember_pipeline/   stage 1: raw FIRMS CSV/zip -> monthly 0.1° cell counts (pandas, streaming)
-pipeline/tests/            unit tests (python -m unittest discover -s pipeline/tests)
-notebooks/                 Kaggle runners (01 aggregate, 02 harmonize)
+pipeline/ember_pipeline/   stage 1 aggregate.py: raw FIRMS CSV/zip -> monthly 0.1° cell counts
+                           stage 2 harmonize.py: transfer factors MODIS -> VIIRS scale, validation
+                           synth.py: synthetic data for demos and tests
+backend/ember_api/         FastAPI: /api/analyze, /api/export.csv, /api/hotspots/recent.csv, static frontend
+frontend/                  no-build web app (Leaflet + Chart.js from CDN)
+notebooks/                 Kaggle runners: 01 aggregate the global archive, 02 harmonize + validate
+scripts/make_demo_data.py  builds data/processed/*.parquet from synthetic data
 docs/DATA_CONTRACT.md      the one table shared by pipeline, notebooks and backend
-data/samples/              small FIRMS extracts used for tests and local runs
+data/samples/              small FIRMS extracts used by the tests
 ```
 
 ## Run locally
 
 ```bash
-pip install -r pipeline/requirements.txt
-PYTHONPATH=pipeline python -m ember_pipeline aggregate data/samples --out data/processed/sample.parquet
+pip install -r pipeline/requirements.txt -r backend/requirements.txt
+
+# 1. data: synthetic demo now, Kaggle outputs later (copy them to data/processed/)
+PYTHONPATH=pipeline python scripts/make_demo_data.py
+
+# 2. API + web app
+cd backend && PYTHONPATH=.:../pipeline uvicorn ember_api.main:app --reload
+# open http://127.0.0.1:8000  (API docs at /docs)
 ```
+
+Optional: set `FIRMS_MAP_KEY` to enable the raw-hotspot CSV export of the last days
+through the FIRMS near-real-time API. Point `EMBER_DATA` at another
+`harmonized_monthly.parquet` to serve a different dataset.
+
+## Tests
+
+```bash
+(cd pipeline && python -m unittest discover -s tests)
+(cd backend && PYTHONPATH=.:../pipeline python -m unittest discover -s tests)
+```
+
+## Deploy
+
+`Dockerfile` bundles API, frontend and the processed data; it runs as is on Cloud Run
+(`gcloud run deploy ember --source .`).
+
+## Global run on Kaggle
+
+1. Upload the FIRMS per-country yearly zips as a Kaggle Dataset.
+2. Run `notebooks/01_aggregate_kaggle.ipynb` against it (CPU, about 10–20 min).
+3. Run `notebooks/02_harmonize_kaggle.ipynb` on the output of 01.
+4. Copy `harmonized_monthly.parquet` to `data/processed/` and redeploy.

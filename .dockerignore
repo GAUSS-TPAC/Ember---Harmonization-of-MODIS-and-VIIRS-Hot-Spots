@@ -1,0 +1,6 @@
+.git
+**/__pycache__
+data/raw
+data/samples
+notebooks
+*.jpg
