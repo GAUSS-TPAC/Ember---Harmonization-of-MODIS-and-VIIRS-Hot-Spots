@@ -1,0 +1,15 @@
+{
+ "id": "alantchapda/ember-01-aggregate-firms",
+ "title": "Ember 01 - Aggregate FIRMS archives",
+ "code_file": "01_aggregate_kaggle.ipynb",
+ "language": "python",
+ "kernel_type": "notebook",
+ "is_private": "true",
+ "enable_gpu": "false",
+ "enable_internet": "true",
+ "dataset_sources": [
+  "<kaggle-user>/<dataset-slug>"
+ ],
+ "competition_sources": [],
+ "kernel_sources": []
+}

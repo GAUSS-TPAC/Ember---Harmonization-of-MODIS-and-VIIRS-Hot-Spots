@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+data/raw/
+data/processed/
+*.parquet
+.ipynb_checkpoints/
+IMG-*.jpg

@@ -70,3 +70,20 @@ Three students from the National Advanced School of Engineering of Yaoundé
 - **Alan Tchapda**
 - **Aghetseh Ngoh**
 - **Arrayntow Enow**
+
+## Repository layout
+
+```
+pipeline/ember_pipeline/   stage 1: raw FIRMS CSV/zip -> monthly 0.1° cell counts (pandas, streaming)
+pipeline/tests/            unit tests (python -m unittest discover -s pipeline/tests)
+notebooks/                 Kaggle runners (01 aggregate, 02 harmonize)
+docs/DATA_CONTRACT.md      the one table shared by pipeline, notebooks and backend
+data/samples/              small FIRMS extracts used for tests and local runs
+```
+
+## Run locally
+
+```bash
+pip install -r pipeline/requirements.txt
+PYTHONPATH=pipeline python -m ember_pipeline aggregate data/samples --out data/processed/sample.parquet
+```
