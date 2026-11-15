@@ -69,6 +69,7 @@ Three students from the National Advanced School of Engineering of Yaoundé
 
 - **Alan Tchapda**
 - **Aghetseh Ngoh**
+<<<<<<< HEAD
 - **Arrayntow Enow**
 
 ## Repository layout
@@ -120,3 +121,24 @@ through the FIRMS near-real-time API. Point `EMBER_DATA` at another
 2. Run `notebooks/01_aggregate_kaggle.ipynb` against it (CPU, about 10–20 min).
 3. Run `notebooks/02_harmonize_kaggle.ipynb` on the output of 01.
 4. Copy `harmonized_monthly.parquet` to `data/processed/` and redeploy.
+=======
+- **Arreyntow Enow**
+
+## Run locally (Linux)
+
+From the repository root:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python scripts/make_mock_data.py
+python scripts/check_data.py
+streamlit run app/streamlit_app.py
+```
+
+The app opens at http://localhost:8501. The default `DATA_MODE` is `mock`, which
+uses synthetic demonstration data and displays a warning in the app. To set it
+explicitly before launching, run `export DATA_MODE=mock`. Use `DATA_MODE=real`
+only after pointing the Parquet paths in `app/config.py` to verified real data.
+>>>>>>> a464498aa2174f64e519041f31096fb4e8e0cde3

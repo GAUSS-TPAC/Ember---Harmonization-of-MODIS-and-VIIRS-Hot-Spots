@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -9,3 +10,29 @@ data/processed/
 .ipynb_checkpoints/
 IMG-*.jpg
 .env
+=======
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# Streamlit and local secrets
+.streamlit/secrets.toml
+.streamlit/credentials.toml
+
+# Environment variables and local overrides
+.env
+.env.*
+!.env.example
+
+# Generated Parquet datasets (mock or downloaded real data)
+data/processed/*.parquet
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+>>>>>>> a464498aa2174f64e519041f31096fb4e8e0cde3

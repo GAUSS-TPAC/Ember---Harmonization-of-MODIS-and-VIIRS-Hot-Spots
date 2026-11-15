@@ -1,0 +1,84 @@
+PROJECT: Burning Activity Calendar (NASA Space Apps, MODIS + VIIRS harmonized hotspots)
+USER: emergency officer asking "is this month unusual in this area?"
+DEMO REGION: Cameroon (lat 2 to 13, lon 8.5 to 16.2). Must work for any area in the data.
+
+STACK (changed from original spec): one Streamlit app + DuckDB reading Parquet.
+No React, no FastAPI. Heavy processing is done offline by a teammate (Kaggle).
+
+RULES FOR EVERY VIEW
+- Every number is a harmonized count, labelled "MODIS-equivalent hotspots".
+- Months from near real-time data are marked "provisional".
+- 2000 to mid-2002 is marked "Terra-only".
+- Never encode meaning by colour alone. Use viridis or cividis.
+
+DATA MODEL (Parquet, produced by teammate)
+grid_monthly (main table):
+  cell_lat, cell_lon  float  south-west corner of 0.1 degree cell
+  year, month         int    UTC
+  n_modis             int    null after MODIS ends
+  n_viirs             int    null before 2012
+  n_harmonized        float  MODIS-equivalent count
+  source              string "modis" or "viirs_scaled"
+  provisional         bool   true if any row came from near real-time data
+calibration:
+  block_lat, block_lon int (1 degree block), month int (1-12),
+  k float (MODIS/VIIRS ratio), n_viirs_overlap int, fallback bool
+validation:
+  region string, holdout_years string, r float (correlation), mape float
+
+REQUIREMENTS (P0 = must, P1 = only if P0 works)
+P0 F1  user selects area (rectangle or polygon on a map)
+P0 F2  start and end date, default = full record
+P0 F3  calendar heatmap: rows = years, columns = Jan..Dec, colour = count
+P0 F4  current month vs historical median of that month: ratio + label
+P0 F5  seasonal profile: median per calendar month, with p25-p75 band,
+       peak month named in the title
+P0 F6  download calendar data as CSV
+P0 F7  Method page: the 7 method steps, validation table (r, mape on
+       held-out years), limitations, data citation
+P1 F8  lat/lon/radius entry
+P1 F9  yearly total bar chart with trend line
+P1 F10 switch between two colour-blind-safe palettes
+P1 F11 download individual hotspots CSV
+P1 F12 country list shortcut
+
+ANOMALY LABELS (ratio = count / median of that calendar month)
+  ratio < 0.5       below normal
+  0.5 to 1.5        normal
+  1.5 to 3          above normal
+  > 3               extreme
+  (thresholds are a first proposal)
+  My rule for median = 0: label "no baseline", do not divide.
+
+BEHAVIOUR
+- A cell belongs to the area if its centre is inside the shape.
+- Areas over 2,000,000 sq km: refuse with a clear message.
+- Heatmap hover shows count and source; provisional cells are hatched or marked.
+- Anomaly card: label shown as text and colour.
+- States: no area selected (short instruction + "Try Cameroon" button);
+  loading (skeleton, not blank); no fires in area (say so in words);
+  error (show message + retry).
+- Performance: country-sized query under 3 seconds.
+- Accessibility: text labels on every status, keyboard-reachable controls.
+
+HARMONIZATION METHOD (done by teammate, shown on Method page)
+1 Filter: MODIS confidence >= 30; VIIRS confidence n or h; type 0 only.
+2 VIIRS reference: S-NPP only.
+3 Grid: 0.1 degree cell + UTC date, count per cell/day/sensor.
+4 Aggregate: sum to cell, month, sensor.
+5 Calibrate on overlap (2012 onward): k = total MODIS / total VIIRS,
+  one k per (1 degree block, calendar month). Too few detections (<50
+  VIIRS) falls back to the wider-region k.
+6 Series: before 2012 use MODIS as observed. From 2012 use MODIS where it
+  exists. After MODIS ends, use VIIRS x k.
+7 Validate: hold out two overlap years, predict MODIS from VIIRS, report
+  correlation and mean absolute percentage error per month.
+Known weaknesses to state openly: VIIRS sees small/cool fires MODIS
+misses; sensors pass at different local times; one k assumes a stable
+relation over the years.
+
+DATA CONVENTIONS (my choices, confirm with teammate)
+- A missing row in grid_monthly means zero hotspots. Medians must count
+  zero years.
+- Latest complete month only. Never compare a partial month with full
+  month medians.
