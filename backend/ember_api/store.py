@@ -33,14 +33,22 @@ class HarmonizedStore:
         self.factors = factors
         self.df = frame.reset_index(drop=True)
         self.df["ym"] = self.df["year"].astype(int) * 100 + self.df["month"].astype(int)
-        self._lat_c = self.df["lat_cell"].to_numpy() + resolution_deg / 2
-        self._lon_c = self.df["lon_cell"].to_numpy() + resolution_deg / 2
+        self._lat_c = self.df["lat_cell"].to_numpy(dtype="float64") + resolution_deg / 2
+        self._lon_c = self.df["lon_cell"].to_numpy(dtype="float64") + resolution_deg / 2
+        self._lat_sorted = bool(np.all(self._lat_c[1:] >= self._lat_c[:-1])) if len(self._lat_c) > 1 else True
 
     @classmethod
     def from_parquet(cls, path: Path) -> "HarmonizedStore":
         factors_path = Path(path).with_name("calibration_factors.parquet")
         factors = pd.read_parquet(factors_path) if factors_path.exists() else None
-        return cls(pd.read_parquet(path), factors=factors)
+        frame = pd.read_parquet(path)
+        for col, dtype in (("lat_cell", "float32"), ("lon_cell", "float32"), ("n_harm", "float32"),
+                           ("n_low", "float32"), ("n_high", "float32")):
+            if col in frame.columns:
+                frame[col] = frame[col].astype(dtype)
+        if "source" in frame.columns:
+            frame["source"] = frame["source"].astype("category")
+        return cls(frame, factors=factors)
 
     def coverage(self) -> Coverage:
         ym = self.df["ym"]
@@ -67,8 +75,13 @@ class HarmonizedStore:
         mask = np.zeros(len(self.df), dtype=bool)
         for ring in rings_of(geometry):
             s, w, n, e = bbox_of(ring)
-            coarse = (self._lat_c >= s) & (self._lat_c <= n) & (self._lon_c >= w) & (self._lon_c <= e)
-            idx = np.flatnonzero(coarse)
+            if self._lat_sorted:  # contiguous latitude band, then lon filter inside it
+                lo, hi = np.searchsorted(self._lat_c, [s, n], side="left")[0], np.searchsorted(self._lat_c, n, side="right")
+                band = np.arange(lo, hi)
+                idx = band[(self._lon_c[lo:hi] >= w) & (self._lon_c[lo:hi] <= e)]
+            else:
+                coarse = (self._lat_c >= s) & (self._lat_c <= n) & (self._lon_c >= w) & (self._lon_c <= e)
+                idx = np.flatnonzero(coarse)
             if idx.size:
                 mask[idx] |= points_in_ring(self._lat_c[idx], self._lon_c[idx], ring)
         if start:

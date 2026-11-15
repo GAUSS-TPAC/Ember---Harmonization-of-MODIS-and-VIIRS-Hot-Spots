@@ -56,3 +56,17 @@ class ApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SortedStoreTests(unittest.TestCase):
+    def test_sorted_and_unsorted_selection_agree(self):
+        monthly = synthetic_monthly(bbox=(4.0, 11.0, 4.6, 11.6), years=(2012, 2014), seed=9)
+        harmonized, _ = harmonize(monthly)
+        shuffled = HarmonizedStore(harmonized.sample(frac=1.0, random_state=0))
+        ordered = HarmonizedStore(harmonized.sort_values(["lat_cell", "lon_cell"]))
+        self.assertTrue(ordered._lat_sorted)
+        self.assertFalse(shuffled._lat_sorted)
+        poly = {"type": "Polygon", "coordinates": [[[11.1, 4.1], [11.45, 4.15], [11.3, 4.5], [11.1, 4.1]]]}
+        a, b = shuffled.select(poly)["n_harm"].sum(), ordered.select(poly)["n_harm"].sum()
+        self.assertAlmostEqual(a, b, places=3)
+        self.assertGreater(a, 0)

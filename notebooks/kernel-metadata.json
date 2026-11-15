@@ -1,14 +1,15 @@
 {
- "id": "alantchapda/ember-01-aggregate-firms",
- "title": "Ember 01 - Aggregate FIRMS archives",
+ "id": "alantchapda/ember-01-aggregate-firms-archives",
+ "title": "Ember 01 aggregate FIRMS archives",
  "code_file": "01_aggregate_kaggle.ipynb",
  "language": "python",
  "kernel_type": "notebook",
  "is_private": "true",
  "enable_gpu": "false",
- "enable_internet": "true",
+ "enable_internet": "false",
  "dataset_sources": [
-  "<kaggle-user>/<dataset-slug>"
+  "aghetsehngoh/firms-global-hotspots-modis-viirs",
+  "alantchapda/ember-pipeline"
  ],
  "competition_sources": [],
  "kernel_sources": []
