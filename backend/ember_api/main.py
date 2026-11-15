@@ -13,8 +13,9 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import analytics
-from .firms import FirmsUnavailable, recent_hotspots_csv
+from .firms import FirmsClient, FirmsUnavailable, recent_hotspots_csv
 from .geometry import bbox_of, rings_of
+from .live import LiveHarmonizer, LiveService, last_complete_month, merge_live
 from .schemas import AnalyzeRequest, BBox, parse_ym
 from .store import HarmonizedStore
 
@@ -23,7 +24,7 @@ DEFAULT_DATA = ROOT / "data" / "processed" / "harmonized_monthly.parquet"
 FRONTEND = ROOT / "frontend"
 
 
-def create_app(store: HarmonizedStore | None = None) -> FastAPI:
+def create_app(store: HarmonizedStore | None = None, live: LiveService | None = None) -> FastAPI:
     app = FastAPI(title="Ember API", version="0.1.0",
                   description="Harmonized MODIS + VIIRS burning-activity calendar")
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -35,10 +36,14 @@ def create_app(store: HarmonizedStore | None = None) -> FastAPI:
                                     f"or set EMBER_DATA")
         store = HarmonizedStore.from_parquet(path)
     app.state.store = store
+    if live is None and store.factors is not None:
+        live = LiveService(FirmsClient(), LiveHarmonizer(store.factors))
+    app.state.live = live
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "rows": int(len(store.df))}
+        return {"status": "ok", "rows": int(len(store.df)),
+                "live": bool(live and live.enabled), "factors": store.factors is not None}
 
     @app.get("/api/coverage")
     def coverage():
@@ -56,8 +61,27 @@ def create_app(store: HarmonizedStore | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(exc))
         if start > end:
             raise HTTPException(status_code=422, detail="start must be before end")
+        if live is not None and live.enabled:  # never show months that have not happened yet
+            today = live.today()
+            end = min(end, (today.year, today.month))
+            if start > end:
+                raise HTTPException(status_code=422, detail="period starts in the future")
         sel = store.select(area, start, end)
+        live_info = {"status": "disabled"}
+        if req.live and live is not None and live.enabled:
+            first = live.first_live_month()
+            if end >= first:
+                try:
+                    recent = live.recent([bbox_of(r) for r in rings_of(area)][0])
+                    recent = recent.loc[store.select_mask(recent, area)] if len(recent) else recent
+                    sel = merge_live(sel, recent, first)
+                    sel = sel.loc[(sel["year"].astype(int) * 100 + sel["month"].astype(int)) <= end[0] * 100 + end[1]]
+                    live_info = {"status": "ok", "first_month": f"{first[0]}-{first[1]:02d}",
+                                 "window_days": live.days, "hotspot_rows": int(len(recent))}
+                except FirmsUnavailable as exc:
+                    live_info = {"status": "unavailable", "reason": str(exc)}
         series = analytics.complete_series(analytics.monthly_series(sel), start, end)
+        app.state.last_live_info = live_info
         return area, start, end, sel, series
 
     @app.post("/api/analyze")
@@ -66,9 +90,13 @@ def create_app(store: HarmonizedStore | None = None) -> FastAPI:
         clim = analytics.climatology(series, req.baseline)
         if req.target:
             ty, tm = parse_ym(req.target)
-        else:
+        else:  # default: the last complete calendar month (provisional NRT months count)
             ty, tm = int(series["year"].iloc[-1]), int(series["month"].iloc[-1])
+            if live is not None and live.enabled:
+                ty, tm = min((ty, tm), last_complete_month(live.today()))
         return {
+            "live": app.state.last_live_info,
+            "period_effective": {"start": f"{start[0]}-{start[1]:02d}", "end": f"{end[0]}-{end[1]:02d}"},
             "area": {"cells": int(sel[["lat_cell", "lon_cell"]].drop_duplicates().shape[0]),
                      "bbox": [bbox_of(r) for r in rings_of(area)][0]},
             "period": {"start": req.start, "end": req.end},

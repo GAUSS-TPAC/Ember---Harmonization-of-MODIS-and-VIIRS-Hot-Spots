@@ -15,10 +15,14 @@ MONTHS = list(range(1, 13))
 def monthly_series(sel: pd.DataFrame) -> pd.DataFrame:
     """Sum over cells -> one row per year-month, with band and dominant source."""
     if sel.empty:
-        return pd.DataFrame(columns=["year", "month", "n_harm", "n_low", "n_high", "n_modis", "n_viirs", "source"])
+        return pd.DataFrame(columns=["year", "month", "n_harm", "n_low", "n_high", "n_modis", "n_viirs", "provisional", "source"])
+    sel = sel.copy()
+    if "provisional" not in sel.columns:
+        sel["provisional"] = False
     g = sel.groupby(["year", "month"], sort=True)
     out = g.agg(n_harm=("n_harm", "sum"), n_low=("n_low", "sum"), n_high=("n_high", "sum"),
-                n_modis=("n_modis", "sum"), n_viirs=("n_viirs_snpp", "sum")).reset_index()
+                n_modis=("n_modis", "sum"), n_viirs=("n_viirs_snpp", "sum"),
+                provisional=("provisional", "any")).reset_index()
     dominant = g["source"].agg(lambda s: s.value_counts().idxmax()).reset_index(name="source")
     out = out.merge(dominant, on=["year", "month"])
     out[["n_harm", "n_low", "n_high"]] = out[["n_harm", "n_low", "n_high"]].round(1)
@@ -33,6 +37,9 @@ def complete_series(series: pd.DataFrame, start: tuple[int, int], end: tuple[int
     for col in ("n_harm", "n_low", "n_high", "n_modis", "n_viirs"):
         out[col] = out[col].fillna(0)
     out["source"] = out["source"].fillna("none")
+    if "provisional" not in out.columns:
+        out["provisional"] = False
+    out["provisional"] = out["provisional"].fillna(False).astype(bool)
     return out
 
 

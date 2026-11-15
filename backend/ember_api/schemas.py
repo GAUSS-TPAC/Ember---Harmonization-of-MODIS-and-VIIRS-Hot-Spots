@@ -30,6 +30,7 @@ class AnalyzeRequest(BaseModel):
     end: str = Field(default="2026-12", description="YYYY-MM")
     baseline: tuple[int, int] | None = Field(default=None, description="years used as climatology")
     target: str | None = Field(default=None, description="YYYY-MM to compare against the climatology")
+    live: bool = Field(default=True, description="append FIRMS near-real-time months when a key is configured")
 
     @field_validator("start", "end", "target")
     @classmethod

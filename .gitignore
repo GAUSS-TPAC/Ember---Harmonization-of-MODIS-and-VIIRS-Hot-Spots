@@ -8,3 +8,4 @@ data/processed/
 *.parquet
 .ipynb_checkpoints/
 IMG-*.jpg
+.env

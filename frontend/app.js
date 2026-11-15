@@ -15,9 +15,13 @@
 
   // ---------------------------------------------------------------- map
   const map = L.map("map", { zoomControl: true }).setView([5.0, 11.5], 6);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: "&copy; OpenStreetMap contributors &copy; CARTO", maxZoom: 12,
+  const dark = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+    attribution: "Tiles &copy; Esri, HERE, Garmin, OpenStreetMap contributors", maxZoom: 16,
   }).addTo(map);
+  const streets = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap contributors", maxZoom: 19,
+  });
+  L.control.layers({ "Dark (Esri)": dark, "Streets (OSM)": streets }, null, { position: "topright", collapsed: true }).addTo(map);
   const drawn = new L.FeatureGroup().addTo(map);
   map.addControl(new L.Control.Draw({
     draw: { polyline: false, circle: false, circlemarker: false, marker: false,
@@ -81,7 +85,10 @@
       lastRequest = body; lastResult = await res.json();
       render(lastResult);
       $("download").disabled = false;
-      setStatus(`Done: ${lastResult.area.cells.toLocaleString()} grid cells, ${lastResult.series.length} months.`);
+      const live = lastResult.live || {};
+      const liveMsg = live.status === "ok" ? ` Live FIRMS data merged from ${live.first_month} (${live.hotspot_rows} cell-months).`
+        : live.status === "unavailable" ? ` Live FIRMS data unavailable: ${live.reason}.` : "";
+      setStatus(`Done: ${lastResult.area.cells.toLocaleString()} grid cells, ${lastResult.series.length} months.${liveMsg}`);
     } catch (err) {
       setStatus(`Error: ${err.message}`, true);
     } finally { $("analyze").disabled = false; }
@@ -125,8 +132,8 @@
     const cal = r.calendar, table = $("calendar");
     const flat = cal.values.flat().filter((v) => v != null && v > 0);
     const vmax = quantile(flat, 0.98) || 1;
-    const bySource = {};
-    r.series.forEach((s) => { bySource[`${s.year}-${s.month}`] = s.source; });
+    const bySource = {}, byProv = {};
+    r.series.forEach((s) => { bySource[`${s.year}-${s.month}`] = s.source; byProv[`${s.year}-${s.month}`] = s.provisional; });
     const target = $("target").value ? ym($("target").value) : null;
     let html = "<thead><tr><th></th>" + MONTHS.map((m) => `<th>${m}</th>`).join("") + "<th>Year</th></tr></thead><tbody>";
     cal.years.forEach((year, i) => {
@@ -137,9 +144,11 @@
         if (v == null) { html += `<td class="empty"></td>`; return; }
         total += v;
         const src = bySource[`${year}-${month}`] || "";
-        const cls = [src.startsWith("MODIS") ? "recon" : "", target && target.y === year && target.m === month ? "selected" : ""].join(" ");
+        const prov = !!byProv[`${year}-${month}`];
+        const cls = [src.startsWith("MODIS") ? "recon" : "", prov ? "prov" : "", target && target.y === year && target.m === month ? "selected" : ""].join(" ");
         const bg = v > 0 ? ramp(Math.sqrt(v / vmax)) : "#1a1e27";
-        html += `<td class="${cls}" style="background:${bg}" data-y="${year}" data-m="${month}" title="${MONTHS[month - 1]} ${year}: ${fmt(v)} hotspots (${src.replace("_", " ")})">${v >= 1 ? fmt(v) : ""}</td>`;
+        const note = prov ? ", provisional near-real-time" : "";
+        html += `<td class="${cls}" style="background:${bg}" data-y="${year}" data-m="${month}" title="${MONTHS[month - 1]} ${year}: ${fmt(v)} hotspots (${src.replace("_", " ")}${note})">${v >= 1 ? fmt(v) : ""}</td>`;
       });
       html += `<th class="year">${fmt(total)}</th></tr>`;
     });

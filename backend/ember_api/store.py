@@ -24,12 +24,13 @@ class Coverage:
 class HarmonizedStore:
     """Holds the harmonized series in memory and answers spatial/temporal selections."""
 
-    def __init__(self, frame: pd.DataFrame, resolution_deg: float = CELL_RES):
+    def __init__(self, frame: pd.DataFrame, resolution_deg: float = CELL_RES, factors: pd.DataFrame | None = None):
         required = {"lat_cell", "lon_cell", "year", "month", "n_harm", "n_low", "n_high", "source"}
         missing = required - set(frame.columns)
         if missing:
             raise ValueError(f"harmonized table lacks columns {sorted(missing)}")
         self.res = resolution_deg
+        self.factors = factors
         self.df = frame.reset_index(drop=True)
         self.df["ym"] = self.df["year"].astype(int) * 100 + self.df["month"].astype(int)
         self._lat_c = self.df["lat_cell"].to_numpy() + resolution_deg / 2
@@ -37,7 +38,9 @@ class HarmonizedStore:
 
     @classmethod
     def from_parquet(cls, path: Path) -> "HarmonizedStore":
-        return cls(pd.read_parquet(path))
+        factors_path = Path(path).with_name("calibration_factors.parquet")
+        factors = pd.read_parquet(factors_path) if factors_path.exists() else None
+        return cls(pd.read_parquet(path), factors=factors)
 
     def coverage(self) -> Coverage:
         ym = self.df["ym"]
@@ -48,6 +51,15 @@ class HarmonizedStore:
             bounds=(float(self.df["lat_cell"].min()), float(self.df["lon_cell"].min()),
                     float(self.df["lat_cell"].max() + self.res), float(self.df["lon_cell"].max() + self.res)),
         )
+
+    def select_mask(self, frame: pd.DataFrame, geometry: dict) -> np.ndarray:
+        """Boolean mask of `frame` rows (any cell table) whose centre is inside the geometry."""
+        lat_c = frame["lat_cell"].to_numpy() + self.res / 2
+        lon_c = frame["lon_cell"].to_numpy() + self.res / 2
+        mask = np.zeros(len(frame), dtype=bool)
+        for ring in rings_of(geometry):
+            mask |= points_in_ring(lat_c, lon_c, ring)
+        return mask
 
     def select(self, geometry: dict, start: tuple[int, int] | None = None,
                end: tuple[int, int] | None = None) -> pd.DataFrame:
