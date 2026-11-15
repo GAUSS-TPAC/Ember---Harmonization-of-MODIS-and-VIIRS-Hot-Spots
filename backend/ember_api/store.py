@@ -25,10 +25,23 @@ class HarmonizedStore:
     """Holds the harmonized series in memory and answers spatial/temporal selections."""
 
     def __init__(self, frame: pd.DataFrame, resolution_deg: float = CELL_RES, factors: pd.DataFrame | None = None):
-        required = {"lat_cell", "lon_cell", "year", "month", "n_harm", "n_low", "n_high", "source"}
+        required = {"lat_cell", "lon_cell", "year", "month", "n_harm"}
         missing = required - set(frame.columns)
         if missing:
             raise ValueError(f"harmonized table lacks columns {sorted(missing)}")
+        frame = frame.copy()
+        # Slim MODIS-only files carry counts only: fill the optional columns.
+        frame["n_harm"] = frame["n_harm"].astype("float32")
+        for col in ("n_low", "n_high"):
+            if col not in frame.columns:
+                frame[col] = frame["n_harm"]
+        if "source" not in frame.columns:
+            frame["source"] = "MODIS_raw"
+        if "n_modis" not in frame.columns:
+            frame["n_modis"] = frame["n_harm"]
+        for col in ("n_viirs_snpp", "n_viirs_noaa20"):
+            if col not in frame.columns:
+                frame[col] = 0
         self.res = resolution_deg
         self.factors = factors
         self.df = frame.reset_index(drop=True)

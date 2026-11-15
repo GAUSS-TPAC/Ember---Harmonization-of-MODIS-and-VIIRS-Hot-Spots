@@ -1,6 +1,10 @@
 .git
+.env
 **/__pycache__
 data/raw
 data/samples
+data/processed/kaggle
+data/processed/demo_*
 notebooks
+docs
 *.jpg

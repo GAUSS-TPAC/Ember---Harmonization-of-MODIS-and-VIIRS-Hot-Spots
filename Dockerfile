@@ -1,4 +1,4 @@
-# Ember API + static frontend, ready for Cloud Run / any container host.
+# Ember API + static frontend (Render, Cloud Run or any container host).
 FROM python:3.12-slim
 WORKDIR /app
 COPY backend/requirements.txt backend/requirements.txt
