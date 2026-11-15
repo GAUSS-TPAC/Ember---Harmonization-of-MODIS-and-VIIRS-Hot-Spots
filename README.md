@@ -70,3 +70,21 @@ Three students from the National Advanced School of Engineering of Yaoundé
 - **Alan Tchapda**
 - **Aghetseh Ngoh**
 - **Arreyntow Enow**
+
+## Run locally (Linux)
+
+From the repository root:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python scripts/make_mock_data.py
+python scripts/check_data.py
+streamlit run app/streamlit_app.py
+```
+
+The app opens at http://localhost:8501. The default `DATA_MODE` is `mock`, which
+uses synthetic demonstration data and displays a warning in the app. To set it
+explicitly before launching, run `export DATA_MODE=mock`. Use `DATA_MODE=real`
+only after pointing the Parquet paths in `app/config.py` to verified real data.

@@ -1,0 +1,24 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# Streamlit and local secrets
+.streamlit/secrets.toml
+.streamlit/credentials.toml
+
+# Environment variables and local overrides
+.env
+.env.*
+!.env.example
+
+# Generated Parquet datasets (mock or downloaded real data)
+data/processed/*.parquet
+
+# OS/editor files
+.DS_Store
+Thumbs.db
