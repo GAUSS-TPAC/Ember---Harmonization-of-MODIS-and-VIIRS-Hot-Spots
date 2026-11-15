@@ -105,7 +105,8 @@ def main() -> None:
         print(f"no VIIRS S-NPP overlap ({totals.to_dict()}): building MODIS-only table by latitude band")
         (OUT / "calibration_factors.parquet").unlink(missing_ok=True)
         rows = modis_only_banded(src, OUT / "harmonized_monthly.parquet")
-        report = {"mode": "modis_only", "platforms": {k: int(v) for k, v in totals.items()}, "rows_out": rows}
+        cells = pq.read_table(OUT / "harmonized_monthly.parquet", columns=["lat_cell", "lon_cell"]).to_pandas().drop_duplicates().shape[0]
+        report = {"mode": "modis_only", "platforms": {k: int(v) for k, v in totals.items()}, "rows_out": rows, "cells": int(cells)}
         (OUT / "harmonization_report.json").write_text(json.dumps(report, indent=2))
         print(f"modis_only: {rows:,} rows ({time.time()-t0:.0f}s)")
         return

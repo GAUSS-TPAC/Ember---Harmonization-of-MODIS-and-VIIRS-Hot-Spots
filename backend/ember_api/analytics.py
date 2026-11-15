@@ -17,6 +17,7 @@ def monthly_series(sel: pd.DataFrame) -> pd.DataFrame:
     if sel.empty:
         return pd.DataFrame(columns=["year", "month", "n_harm", "n_low", "n_high", "n_modis", "n_viirs", "provisional", "source"])
     sel = sel.copy()
+    sel["source"] = sel["source"].astype(str)
     if "provisional" not in sel.columns:
         sel["provisional"] = False
     g = sel.groupby(["year", "month"], sort=True)

@@ -70,3 +70,23 @@ class SortedStoreTests(unittest.TestCase):
         a, b = shuffled.select(poly)["n_harm"].sum(), ordered.select(poly)["n_harm"].sum()
         self.assertAlmostEqual(a, b, places=3)
         self.assertGreater(a, 0)
+
+
+class LazyStoreTests(unittest.TestCase):
+    def test_lazy_matches_in_memory(self):
+        import tempfile
+        from ember_api.store import LazyHarmonizedStore
+        monthly = synthetic_monthly(bbox=(4.0, 11.0, 4.6, 11.6), years=(2012, 2014), seed=11)
+        harmonized, _ = harmonize(monthly)
+        harmonized = harmonized.sort_values(["lat_cell", "lon_cell", "year", "month"])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "h.parquet"
+            harmonized.to_parquet(path, index=False, row_group_size=500)
+            lazy, mem = LazyHarmonizedStore(path), HarmonizedStore(harmonized)
+            poly = {"type": "Polygon", "coordinates": [[[11.1, 4.1], [11.45, 4.15], [11.3, 4.5], [11.1, 4.1]]]}
+            for rng in ((None, None), ((2013, 3), (2014, 6))):
+                a = lazy.select(poly, *rng)["n_harm"].sum()
+                b = mem.select(poly, *rng)["n_harm"].sum()
+                self.assertAlmostEqual(a, b, places=3)
+            self.assertEqual(lazy.coverage().first, mem.coverage().first)
+            self.assertEqual(lazy.coverage().last, mem.coverage().last)

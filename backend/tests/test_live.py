@@ -109,3 +109,20 @@ class LiveTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModisOnlyLiveTests(unittest.TestCase):
+    def test_without_factors_uses_modis_nrt_unscaled(self):
+        urls = []
+
+        def fetch(url):
+            urls.append(url)
+            start = url.rsplit("/", 1)[1]
+            return HEADER.replace("bright_ti4", "brightness").replace("bright_ti5", "bright_t31") + \
+                f"4.05,11.05,320.0,1.0,1.0,{start},1030,T,MODIS,80,6.1NRT,300.0,9.0,D\n"
+        service = LiveService(FirmsClient(map_key="K", fetch=fetch), LiveHarmonizer(None), days=10,
+                              today=date(2026, 11, 15))
+        live = service.recent((4.0, 11.0, 4.3, 11.3))
+        self.assertIn("/MODIS_NRT/", urls[0])
+        self.assertEqual(set(live["source"]), {"MODIS_raw"})
+        self.assertEqual(live["n_harm"].sum(), 2)  # one detection per 5-day request

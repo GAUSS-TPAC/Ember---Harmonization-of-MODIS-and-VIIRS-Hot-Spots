@@ -89,3 +89,95 @@ class HarmonizedStore:
         if end:
             mask &= self.df["ym"].to_numpy() <= end[0] * 100 + end[1]
         return self.df.loc[mask]
+
+
+class LazyHarmonizedStore:
+    """Same interface as HarmonizedStore, but reads only the requested bbox from Parquet.
+
+    The file must be sorted by lat_cell (scripts/ingest_kaggle.py does it) so row-group
+    statistics let pyarrow skip most of the world on each request.
+    """
+
+    def __init__(self, path: Path, resolution_deg: float = CELL_RES, factors: pd.DataFrame | None = None):
+        import pyarrow.dataset as ds
+        import pyarrow.parquet as pq
+
+        self.path = Path(path)
+        self.res = resolution_deg
+        self.factors = factors
+        self._ds = ds.dataset(str(self.path), format="parquet")
+        meta = pq.ParquetFile(str(self.path)).metadata
+        self.num_rows = meta.num_rows
+        self._coverage = self._scan_coverage(meta)
+
+    def _scan_coverage(self, meta) -> Coverage:
+        import pyarrow.dataset as ds
+
+        names = meta.schema.names
+        stats = {c: [meta.row_group(i).column(names.index(c)).statistics for i in range(meta.num_row_groups)]
+                 for c in ("lat_cell", "lon_cell", "year")}
+        lo = {c: min(s.min for s in v) for c, v in stats.items()}
+        hi = {c: max(s.max for s in v) for c, v in stats.items()}
+        first_m = self._ds.to_table(columns=["month"], filter=ds.field("year") == lo["year"]).column("month")
+        last_m = self._ds.to_table(columns=["month"], filter=ds.field("year") == hi["year"]).column("month")
+        report = self.path.with_name("harmonization_report.json")
+        cells = -1
+        if report.exists():
+            import json
+            cells = int(json.loads(report.read_text()).get("cells", -1))
+        return Coverage(first=(int(lo["year"]), int(min(first_m.to_pylist()))),
+                        last=(int(hi["year"]), int(max(last_m.to_pylist()))), cells=cells,
+                        bounds=(float(lo["lat_cell"]), float(lo["lon_cell"]),
+                                float(hi["lat_cell"]) + self.res, float(hi["lon_cell"]) + self.res))
+
+    def coverage(self) -> Coverage:
+        return self._coverage
+
+    @property
+    def df(self) -> pd.DataFrame:  # only used for its length by /api/health
+        return pd.DataFrame(index=pd.RangeIndex(self.num_rows))
+
+    def _read_bbox(self, s: float, w: float, n: float, e: float,
+                   start: tuple[int, int] | None, end: tuple[int, int] | None) -> pd.DataFrame:
+        import pyarrow.dataset as ds
+
+        pad = self.res
+        flt = ((ds.field("lat_cell") >= s - pad) & (ds.field("lat_cell") <= n) &
+               (ds.field("lon_cell") >= w - pad) & (ds.field("lon_cell") <= e))
+        if start:
+            flt &= ds.field("year") >= start[0]
+        if end:
+            flt &= ds.field("year") <= end[0]
+        return self._ds.to_table(filter=flt).to_pandas()
+
+    def select(self, geometry: dict, start: tuple[int, int] | None = None,
+               end: tuple[int, int] | None = None) -> pd.DataFrame:
+        parts = []
+        for ring in rings_of(geometry):
+            s, w, n, e = bbox_of(ring)
+            frame = self._read_bbox(s, w, n, e, start, end)
+            if len(frame):
+                parts.append(HarmonizedStore(frame, self.res).select(
+                    {"type": "Polygon", "coordinates": [ring]}, start, end))
+        if not parts:
+            return HarmonizedStore(pd.DataFrame(columns=["lat_cell", "lon_cell", "year", "month", "n_harm",
+                                                         "n_low", "n_high", "source", "n_modis",
+                                                         "n_viirs_snpp", "n_viirs_noaa20"]), self.res).df
+        out = pd.concat(parts, ignore_index=True)
+        return out.drop_duplicates(subset=["lat_cell", "lon_cell", "year", "month"])
+
+    def select_mask(self, frame: pd.DataFrame, geometry: dict) -> np.ndarray:
+        return HarmonizedStore.select_mask(self, frame, geometry)
+
+
+def open_store(path: Path, max_in_memory_rows: int = 3_000_000):
+    """In-memory store for small tables, lazy bbox reads for large ones."""
+    import pyarrow.parquet as pq
+
+    path = Path(path)
+    factors_path = path.with_name("calibration_factors.parquet")
+    factors = pd.read_parquet(factors_path) if factors_path.exists() else None
+    if pq.ParquetFile(str(path)).metadata.num_rows <= max_in_memory_rows:
+        store = HarmonizedStore.from_parquet(path)
+        return store
+    return LazyHarmonizedStore(path, factors=factors)

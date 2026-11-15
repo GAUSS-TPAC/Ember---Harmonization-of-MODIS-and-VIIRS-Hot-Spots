@@ -52,12 +52,21 @@ class LiveHarmonizer:
         self.grid = grid
         self.cfg = cfg
 
+    @property
+    def sources(self) -> tuple[str, ...]:
+        """MODIS NRT when there is no calibration yet (same scale as the MODIS-only archive)."""
+        return ("MODIS_NRT",) if self.factors is None else ("VIIRS_NOAA20_NRT",)
+
     def harmonize(self, hotspots: pd.DataFrame, first_live: tuple[int, int]) -> pd.DataFrame:
         if hotspots.empty:
             return pd.DataFrame()
         monthly = aggregate_frame(hotspots, self.grid, country="live")
         if monthly.empty:
             return pd.DataFrame()
+        if self.factors is None:
+            out = _modis_only(monthly)
+            out["provisional"] = True
+            return out
         factors = fill_missing_factors(self.factors, monthly)
         harmonized = apply_factors(monthly, factors, live_config(first_live, self.cfg))
         harmonized["provisional"] = True
@@ -98,10 +107,24 @@ class LiveService:
         if hit and time.time() - hit[0] < self.ttl:
             return hit[1]
         start, end = self.window()
-        raw = self.client.hotspots(bbox, start, end)
+        raw = self.client.hotspots(bbox, start, end, sources=self.harmonizer.sources)
         out = self.harmonizer.harmonize(raw, self.first_live_month())
         self._cache[key] = (time.time(), out)
         return out
+
+
+def _modis_only(monthly: pd.DataFrame) -> pd.DataFrame:
+    from ember_pipeline.harmonize import HARMONIZED_COLUMNS, pivot_platforms
+    wide = pivot_platforms(monthly)
+    out = wide[["lat_cell", "lon_cell", "year", "month"]].copy()
+    out["n_modis"] = wide["MODIS_Terra"] + wide["MODIS_Aqua"]
+    out["n_harm"] = out["n_modis"].astype("float64")
+    out["n_low"] = out["n_harm"]
+    out["n_high"] = out["n_harm"]
+    out["source"] = "MODIS_raw"
+    out["n_viirs_snpp"] = wide["VIIRS_SNPP"]
+    out["n_viirs_noaa20"] = wide["VIIRS_NOAA20"]
+    return out[HARMONIZED_COLUMNS]
 
 
 def merge_live(archive: pd.DataFrame, live: pd.DataFrame, first_live: tuple[int, int]) -> pd.DataFrame:

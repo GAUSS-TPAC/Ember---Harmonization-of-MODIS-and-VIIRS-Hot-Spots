@@ -17,7 +17,7 @@ from .firms import FirmsClient, FirmsUnavailable, recent_hotspots_csv
 from .geometry import bbox_of, rings_of
 from .live import LiveHarmonizer, LiveService, last_complete_month, merge_live
 from .schemas import AnalyzeRequest, BBox, parse_ym
-from .store import HarmonizedStore
+from .store import HarmonizedStore, open_store
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA = ROOT / "data" / "processed" / "harmonized_monthly.parquet"
@@ -34,9 +34,9 @@ def create_app(store: HarmonizedStore | None = None, live: LiveService | None = 
         if not path.exists():
             raise FileNotFoundError(f"harmonized table not found at {path}; run scripts/make_demo_data.py "
                                     f"or set EMBER_DATA")
-        store = HarmonizedStore.from_parquet(path)
+        store = open_store(path)
     app.state.store = store
-    if live is None and store.factors is not None:
+    if live is None:
         live = LiveService(FirmsClient(), LiveHarmonizer(store.factors))
     app.state.live = live
 
