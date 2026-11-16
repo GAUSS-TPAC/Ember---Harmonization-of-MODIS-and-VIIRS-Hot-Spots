@@ -70,7 +70,7 @@ Three students from the National Advanced School of Engineering of Yaoundé
 - **Alan Tchapda**
 - **Aghetseh Ngoh**
 <<<<<<< HEAD
-- **Arrayntow Enow**
+- **Arreyntow Enow**
 
 ## Repository layout
 
